@@ -765,6 +765,7 @@ static bool LoadImageData(Image *image, std::string *err, int req_width,
   image->component = comp;
   image->image.resize(static_cast<size_t>(w * h * comp));
   std::copy(data, data + w * h * comp, image->image.begin());
+  stbi_image_free(data);
 
   return true;
 }
