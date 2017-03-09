@@ -669,37 +669,54 @@ std::string base64_decode(std::string const &encoded_string) {
 #pragma clang diagnostic pop
 #endif
 
+typedef bool (*OpenFileCallbackFunc)(const std::string &, std::ifstream &, size_t *);
+static OpenFileCallbackFunc OpenFileCallback = nullptr;
+
 static bool LoadExternalFile(std::vector<unsigned char> *out, std::string *err,
                              const std::string &filename,
                              const std::string &basedir, size_t reqBytes,
                              bool checkSize) {
   out->clear();
 
-  std::vector<std::string> paths;
-  paths.push_back(basedir);
-  paths.push_back(".");
+  size_t sz = 0;
 
-  std::string filepath = FindFile(paths, filename);
-  if (filepath.empty()) {
-    if (err) {
-      (*err) += "File not found : " + filename + "\n";
+  std::ifstream f;
+  std::string filepath = JoinPath(basedir, filename);
+  if (OpenFileCallback != nullptr) {
+    if (!OpenFileCallback(filepath, f, &sz)) {
+      if (err) {
+        (*err) += "File not found (callback): " + filepath + "\n";
+      }
+      return false;
     }
-    return false;
+  } else {
+    std::vector<std::string> paths;
+    paths.push_back(basedir);
+    paths.push_back(".");
+
+    filepath = FindFile(paths, filename);
+    if (filepath.empty()) {
+      if (err) {
+        (*err) += "File not found : " + filename + "\n";
+      }
+      return false;
+    }
+
+    f = std::ifstream(filepath.c_str(), std::ifstream::binary);
+    if (!f) {
+      if (err) {
+        (*err) += "File open error : " + filepath + "\n";
+      }
+      return false;
+    }
+
+    f.seekg(0, f.end);
+    sz = static_cast<size_t>(f.tellg());
+
+    f.seekg(0, f.beg);
   }
 
-  std::ifstream f(filepath.c_str(), std::ifstream::binary);
-  if (!f) {
-    if (err) {
-      (*err) += "File open error : " + filepath + "\n";
-    }
-    return false;
-  }
-
-  f.seekg(0, f.end);
-  size_t sz = static_cast<size_t>(f.tellg());
   std::vector<unsigned char> buf(sz);
-
-  f.seekg(0, f.beg);
   f.read(reinterpret_cast<char *>(&buf.at(0)),
          static_cast<std::streamsize>(sz));
   f.close();
